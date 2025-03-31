@@ -1,0 +1,9 @@
+numpy
+random
+matplotlib
+mpl_toolkits
+scipy
+pandas
+os
+tqdm
+time
