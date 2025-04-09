@@ -2,4 +2,7 @@ matplotlib
 numpy
 pandas
 scipy
+time
+tqdm
+
 
