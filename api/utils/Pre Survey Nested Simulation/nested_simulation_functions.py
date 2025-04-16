@@ -23,31 +23,31 @@ def generate_real_scores(num_students, subjects_params):
         )
     return real_scores
 
-def apply_integrity_distortion(scores, passing_mark, slope, delta):
+def apply_integrity_distortion(scores, passing_mark, minimum_marks, delta):
     """
     Apply integrity distortion to scores.
     
     Args:
         scores (np.ndarray): Array of real scores.
         passing_mark (float): Passing mark for the subject.
-        slope (float): Slope of the distortion line.
+        minimum_marks (float): Minimum marks for the subject.
         delta (float): The marks below the passing mark at which teacher gives passing marks.
     
     Returns:
         np.ndarray: Distorted scores with integrity distortion applied.
     """
-    distortion = np.maximum(0, passing_mark + delta - scores) * slope
-    distorted_scores = scores + distortion
+    slope = (passing_mark - minimum_marks) / (passing_mark - delta)
+    distorted_scores = scores * slope + minimum_marks
     return np.clip(distorted_scores, 0, 100)
 
-def apply_integrity_distortion_L0(real_scores, passing_marks, slope_L0, delta):
+def apply_integrity_distortion_L0(real_scores, passing_marks, minimum_marks, delta):
     """
     Apply integrity distortion at L0 for all subjects.
     
     Args:
         real_scores (dict): Dictionary of real scores for each subject.
         passing_marks (dict): Dictionary of passing marks for each subject.
-        slope_L0 (float): Slope for L0 integrity distortion.
+        minimum_marks (dict): Dictionary of minimum marks for each subject.
         delta (float): The marks below the passing mark at which teacher gives passing marks.
     
     Returns:
@@ -56,19 +56,20 @@ def apply_integrity_distortion_L0(real_scores, passing_marks, slope_L0, delta):
     distorted_scores = {}
     for subject, scores in real_scores.items():
         passing_mark = passing_marks[subject]
-        distorted_scores[subject] = apply_integrity_distortion(scores, passing_mark, slope_L0, delta)
+        min_marks = minimum_marks[subject]
+        distorted_scores[subject] = apply_integrity_distortion(scores, passing_mark, min_marks, delta)
     return distorted_scores
 
-def apply_integrity_distortion_L1(real_scores, passing_marks, collusion_index, slope_L0, delta):
+def apply_integrity_distortion_L1(real_scores, passing_marks, minimum_marks_L0, delta_L0, collusion_index):
     """
     Apply integrity distortion at L1 for all subjects.
     
     Args:
         real_scores (dict): Dictionary of real scores for each subject.
         passing_marks (dict): Dictionary of passing marks for each subject.
+        minimum_marks_L0 (dict): Dictionary of L0 minimum marks for each subject.
+        delta_L0 (float): The L0 delta value.
         collusion_index (float): Collusion index (0 to 1) for L1 integrity distortion.
-        slope_L0 (float): Slope for L0 integrity distortion.
-        delta (float): The marks below the passing mark at which teacher gives passing marks.
     
     Returns:
         dict: Distorted scores with integrity distortion applied at L1.
@@ -79,8 +80,9 @@ def apply_integrity_distortion_L1(real_scores, passing_marks, collusion_index, s
     distorted_scores = {}
     for subject, scores in real_scores.items():
         passing_mark = passing_marks[subject]
-        slope_L1 = slope_L0 * collusion_index  # Adjust slope based on collusion index
-        distorted_scores[subject] = apply_integrity_distortion(scores, passing_mark, slope_L1, delta)
+        min_marks_L1 = minimum_marks_L0[subject] * collusion_index
+        delta_L1 = delta_L0 * collusion_index
+        distorted_scores[subject] = apply_integrity_distortion(scores, passing_mark, min_marks_L1, delta_L1)
     return distorted_scores
 
 def apply_moderation_distortion(scores, moderation_index):
@@ -113,14 +115,14 @@ def apply_measurement_error(scores, mean=0, std_dev=1):
     distorted_scores = scores + noise
     return np.clip(distorted_scores, 0, 100)
 
-def apply_distortion_L0(real_scores, passing_marks, slope_L0, delta, measurement_error_mean=0, measurement_error_std_dev=1):
+def apply_distortion_L0(real_scores, passing_marks, minimum_marks, delta, measurement_error_mean=0, measurement_error_std_dev=1):
     """
     Apply all distortions at L0.
     
     Args:
         real_scores (dict): Dictionary of real scores for each subject.
         passing_marks (dict): Dictionary of passing marks for each subject.
-        slope_L0 (float): Slope for L0 integrity distortion.
+        minimum_marks (dict): Dictionary of minimum marks for each subject.
         delta (float): The marks below the passing mark at which teacher gives passing marks.
         measurement_error_mean (float, optional): Mean of the normal distribution for measurement error. Default is 0.
         measurement_error_std_dev (float, optional): Standard deviation of the normal distribution for measurement error. Default is 1.
@@ -128,23 +130,23 @@ def apply_distortion_L0(real_scores, passing_marks, slope_L0, delta, measurement
     Returns:
         dict: Distorted scores with all L0 distortions applied.
     """
-    distorted_scores = apply_integrity_distortion_L0(real_scores, passing_marks, slope_L0, delta)
+    distorted_scores = apply_integrity_distortion_L0(real_scores, passing_marks, minimum_marks, delta)
     distorted_scores = {
         subject: apply_measurement_error(scores, mean=measurement_error_mean, std_dev=measurement_error_std_dev)
         for subject, scores in distorted_scores.items()
     }
     return distorted_scores
 
-def apply_distortion_L1(real_scores, passing_marks, collusion_index, slope_L0, delta, measurement_error_mean=0, measurement_error_std_dev=1, moderation_index_L1=0):
+def apply_distortion_L1(real_scores, passing_marks, minimum_marks_L0, delta_L0, collusion_index, measurement_error_mean=0, measurement_error_std_dev=1, moderation_index_L1=0):
     """
     Apply all distortions at L1.
     
     Args:
         real_scores (dict): Dictionary of real scores for each subject.
         passing_marks (dict): Dictionary of passing marks for each subject.
+        minimum_marks_L0 (dict): Dictionary of L0 minimum marks for each subject.
+        delta_L0 (float): The L0 delta value.
         collusion_index (float): Collusion index (0 to 1) for L1 integrity distortion.
-        slope_L0 (float): Slope for L0 integrity distortion.
-        delta (float): The marks below the passing mark at which teacher gives passing marks.
         measurement_error_mean (float, optional): Mean of the normal distribution for measurement error. Default is 0.
         measurement_error_std_dev (float, optional): Standard deviation of the normal distribution for measurement error. Default is 1.
         moderation_index_L1 (float, optional): Moderation index for L1 distortion. Default is 0.
@@ -152,7 +154,7 @@ def apply_distortion_L1(real_scores, passing_marks, collusion_index, slope_L0, d
     Returns:
         dict: Distorted scores with all L1 distortions applied.
     """
-    distorted_scores = apply_integrity_distortion_L1(real_scores, passing_marks, collusion_index, slope_L0, delta)
+    distorted_scores = apply_integrity_distortion_L1(real_scores, passing_marks, minimum_marks_L0, delta_L0, collusion_index)
     distorted_scores = {
         subject: apply_moderation_distortion(scores, moderation_index_L1) for subject, scores in distorted_scores.items()
     }
@@ -188,6 +190,8 @@ def simulate_test_scores(
     students_per_school, 
     subjects_params, 
     passing_marks, 
+    minimum_marks, 
+    delta, 
     n_schools_per_L1, 
     n_L1s_per_L2, 
     n_L2s, 
@@ -195,8 +199,6 @@ def simulate_test_scores(
     L2_retest_percentage_schools, 
     L2_retest_percentage_students, 
     collusion_index, 
-    slope_L0=0.1, 
-    delta=0, 
     moderation_index_L1=0, 
     moderation_index_L2=0, 
     measurement_error_mean=0, 
@@ -209,6 +211,8 @@ def simulate_test_scores(
         students_per_school (int): Number of students in each school.
         subjects_params (dict): Dictionary containing parameters for each subject.
         passing_marks (dict): Dictionary of passing marks for each subject.
+        minimum_marks (dict): Dictionary of minimum marks for each subject.
+        delta (float): The marks below the passing mark at which teacher gives passing marks.
         n_schools_per_L1 (int): Number of schools grouped into each L1 unit.
         n_L1s_per_L2 (int): Number of L1 units grouped into each L2 unit.
         n_L2s (int): Number of L2 units.
@@ -216,8 +220,6 @@ def simulate_test_scores(
         L2_retest_percentage_schools (float): Percentage of schools retested at the L2 level (0 to 100).
         L2_retest_percentage_students (float): Percentage of students retested at the L2 level (0 to 100).
         collusion_index (float): Collusion index for L1 integrity distortion (0 to 1).
-        slope_L0 (float, optional): Slope for L0 integrity distortion. Default is 0.1.
-        delta (float, optional): The marks below the passing mark at which teacher gives passing marks. Default is 0.
         moderation_index_L1 (float, optional): Moderation index for L1 distortion. Default is 0.
         moderation_index_L2 (float, optional): Moderation index for L2 distortion. Default is 0.
         measurement_error_mean (float, optional): Mean of the normal distribution for measurement error. Default is 0.
@@ -280,8 +282,8 @@ def simulate_test_scores(
                     student_id: apply_distortion_L0(
                         real_scores[student_id], 
                         passing_marks, 
-                        slope_L0=slope_L0, 
-                        delta=delta, 
+                        minimum_marks, 
+                        delta, 
                         measurement_error_mean=measurement_error_mean, 
                         measurement_error_std_dev=measurement_error_std_dev
                     )
@@ -320,9 +322,9 @@ def simulate_test_scores(
                     student_id: apply_distortion_L1(
                         real_scores[student_id], 
                         passing_marks, 
+                        minimum_marks, 
+                        delta, 
                         collusion_index, 
-                        slope_L0=slope_L0, 
-                        delta=delta, 
                         measurement_error_mean=measurement_error_mean, 
                         measurement_error_std_dev=measurement_error_std_dev, 
                         moderation_index_L1=moderation_index_L1
@@ -437,35 +439,50 @@ def plot_nested_scores(nested_scores, subjects, passing_marks):
 
         # Scatter plot: Real vs L0 scores
         axes[1, i].scatter(real_scores[subject], L0_scores[subject], alpha=0.5, color="black")
+        # Vertical line showing passing marks
         axes[1, i].axvline(passing_mark, color="red", linestyle="--", label="Passing Mark")
+        # Horizontal line showing passing marks
+        axes[1, i].axhline(passing_mark, color="red", linestyle="--", label="Passing Mark")
         axes[1, i].set_title(f"Real vs L0 Scores - {subject}", fontsize=title_fontsize)
         axes[1, i].set_xlabel("Real Scores", fontsize=label_fontsize)
         axes[1, i].set_ylabel("L0 Scores", fontsize=label_fontsize)
         axes[1, i].tick_params(axis="both", labelsize=tick_fontsize)
+        axes[1, i].set_xlim(-5, 105)
+        axes[1, i].set_ylim(-5, 105)
         axes[1, i].grid()
 
         # Scatter plot: Real vs L1 scores
         axes[2, i].scatter(L1_real_scores[subject], L1_scores[subject], alpha=0.5, color="black")
+        # Vertical line showing passing marks
         axes[2, i].axvline(passing_mark, color="red", linestyle="--", label="Passing Mark")
+        # Horizontal line showing passing marks
+        axes[2, i].axhline(passing_mark, color="red", linestyle="--", label="Passing Mark")
         axes[2, i].set_title(f"Real vs L1 Scores - {subject}", fontsize=title_fontsize)
         axes[2, i].set_xlabel("Real Scores (L1 Retested)", fontsize=label_fontsize)
         axes[2, i].set_ylabel("L1 Scores", fontsize=label_fontsize)
         axes[2, i].tick_params(axis="both", labelsize=tick_fontsize)
+        axes[2, i].set_xlim(-5, 105)
+        axes[2, i].set_ylim(-5, 105)
         axes[2, i].grid()
 
         # Scatter plot: Real vs L2 scores
         axes[3, i].scatter(L2_real_scores[subject], L2_scores[subject], alpha=0.5, color="black")
+        # Vertical line showing passing marks
         axes[3, i].axvline(passing_mark, color="red", linestyle="--", label="Passing Mark")
+        # Horizontal line showing passing marks
+        axes[3, i].axhline(passing_mark, color="red", linestyle="--", label="Passing Mark")
         axes[3, i].set_title(f"Real vs L2 Scores - {subject}", fontsize=title_fontsize)
         axes[3, i].set_xlabel("Real Scores (L2 Retested)", fontsize=label_fontsize)
         axes[3, i].set_ylabel("L2 Scores", fontsize=label_fontsize)
         axes[3, i].tick_params(axis="both", labelsize=tick_fontsize)
+        axes[3, i].set_xlim(-5, 105)
+        axes[3, i].set_ylim(-5, 105)
         axes[3, i].grid()
 
     plt.tight_layout()
     plt.show()
 
-def calculate_disc_scores(nested_scores, method, passing_marks):
+def calculate_disc_scores(nested_scores, method, passing_marks, subjects):
     """
     Calculate discrepancy scores for three pairs of scores: L0 vs L2, L1 vs L2, and L0 vs L1.
     For each L0 (school), calculate the discrepancy score for L0 vs L2 and L0 vs L1.
@@ -587,6 +604,69 @@ def calculate_disc_scores(nested_scores, method, passing_marks):
 
     # L0 vs L1
     plot_histogram(axes[2], L0_vs_L1_scores, "L0 vs L1 Discrepancy")
+
+    # Combined scatter plot for L0 vs L1 and L1 vs L2 discrepancies versus real scores
+    fig, axes = plt.subplots(2, len(subjects), figsize=(6 * len(subjects), 12))
+
+    # Ensure axes is a 2D array even if there's only one subject
+    if len(subjects) == 1:
+        axes = np.array([axes]).T
+
+    # Iterate over each subject
+    for i, subject in enumerate(subjects):
+        real_scores_for_L0_vs_L1 = []
+        discrepancies_for_L0_vs_L1 = []
+        real_scores_for_L1_vs_L2 = []
+        discrepancies_for_L1_vs_L2 = []
+
+        # Traverse the nested_scores dictionary to calculate discrepancies for the current subject
+        for l2_data in nested_scores.values():
+            for l1_data in l2_data.values():
+                for school_data in l1_data.values():
+                    for student_id in school_data["real_scores"]:
+                        # Check if the student has scores for L0, L1, and L2 for the current subject
+                        if (
+                            subject in school_data["real_scores"][student_id]
+                            and subject in school_data["L0_scores"].get(student_id, {})
+                            and subject in school_data["L1_scores"].get(student_id, {})
+                        ):
+                            # Extract real score and calculate L0 vs L1 discrepancy
+                            real_score = school_data["real_scores"][student_id][subject]
+                            real_scores_for_L0_vs_L1.append(real_score)
+                            L0_score = school_data["L0_scores"][student_id][subject]
+                            L1_score = school_data["L1_scores"][student_id][subject]
+                            discrepancy_L0_L1 = discrepancy_score([L0_score], [L1_score], method)
+                            discrepancies_for_L0_vs_L1.append(discrepancy_L0_L1)
+
+                        # Check if the student has scores for L1 and L2 for the current subject
+                        if (
+                            subject in school_data["real_scores"][student_id]
+                            and subject in school_data["L1_scores"].get(student_id, {})
+                            and subject in school_data["L2_scores"].get(student_id, {})
+                        ):
+                            # Extract real score and calculate L1 vs L2 discrepancy
+                            real_score = school_data["real_scores"][student_id][subject]
+                            real_scores_for_L1_vs_L2.append(real_score)
+                            L1_score = school_data["L1_scores"][student_id][subject]
+                            L2_score = school_data["L2_scores"][student_id][subject]
+                            discrepancy_L1_L2 = discrepancy_score([L1_score], [L2_score], method)
+                            discrepancies_for_L1_vs_L2.append(discrepancy_L1_L2)
+
+        # Plot L0 vs L1 discrepancy for the current subject
+        axes[0, i].scatter(real_scores_for_L0_vs_L1, discrepancies_for_L0_vs_L1, alpha=0.5, color="black")
+        axes[0, i].set_title(f"{subject} (L0 vs L1)", fontsize=title_fontsize)
+        axes[0, i].set_xlabel("Real Scores", fontsize=label_fontsize)
+        axes[0, i].set_ylabel("L0 vs L1 Discrepancy\nstudent-wise", fontsize=label_fontsize)
+        axes[0, i].tick_params(axis="both", labelsize=tick_fontsize)
+        axes[0, i].grid()
+
+        # Plot L1 vs L2 discrepancy for the current subject
+        axes[1, i].scatter(real_scores_for_L1_vs_L2, discrepancies_for_L1_vs_L2, alpha=0.5, color="black")
+        axes[1, i].set_title(f"{subject} (L1 vs L2)", fontsize=title_fontsize)
+        axes[1, i].set_xlabel("Real Scores", fontsize=label_fontsize)
+        axes[1, i].set_ylabel("L1 vs L2 Discrepancy\nstudent-wise", fontsize=label_fontsize)
+        axes[1, i].tick_params(axis="both", labelsize=tick_fontsize)
+        axes[1, i].grid()
 
     plt.tight_layout()
     plt.show()
